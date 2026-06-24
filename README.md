@@ -34,4 +34,54 @@ The system utilizes a lightweight, frontend-only single-file architecture deploy
 
 ---
 
-## 🏎️ Computational Pipeline Architecture
+## 🏎️ Data Processing Pipeline
+
+```text
+User Location Query
+        │
+        ▼
+OSM Nominatim Geocoding
+        │
+        ▼
+Map Centering & Route Generation
+        │
+        ▼
+Driver GPS Position Updates
+        │
+        ▼
+Turf.js Buffer Generation
+        │
+        ▼
+H3 Spatial Quantization
+        │
+        ▼
+Hexagonal Cell Index Creation
+        │
+        ▼
+Pickup Eligibility Matching
+        │
+        ▼
+Real-Time Visualization
+        │
+        ▼
+Leaflet Map Rendering
+```
+
+### Pipeline Overview
+
+1. **Location Search** – User enters any location worldwide, which is converted into geographic coordinates using the OSM Nominatim Geocoder.
+
+2. **Map Initialization** – The map is centered on the selected location and a simulated ride corridor is generated.
+
+3. **Driver Tracking** – The driver's position is continuously updated along the generated route.
+
+4. **Spatial Buffering** – Turf.js creates a dynamic service corridor around the driver's current location.
+
+5. **H3 Quantization** – The corridor is discretized into H3 hexagonal cells for efficient spatial indexing.
+
+6. **Eligibility Filtering** – Pickup locations are mapped to H3 cells and matched against corridor cells using constant-time set operations.
+
+7. **Visualization Layer** – Eligible pickups are highlighted in red, ineligible pickups in gray, and results are rendered in real time using Leaflet.
+
+```
+```
