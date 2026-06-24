@@ -8,8 +8,10 @@ An interactive, high-performance geospatial simulation platform designed for **M
 
 ## 🔗 Live Deployments
 
-* **🖥️ Interactive Production Demo:** https://macro-rides-mobility.netlify.app/
-* **📁 Source Code Repository:** https://github.com/shaswatgithub/macro-rides-mobility
+* **🖥️ Interactive Production Demo:** [macro-rides-mobility.netlify.app](https://macro-rides-mobility.netlify.app/)
+* **📁 Source Code Repository:** [github.com/shaswatgithub/macro-rides-mobility](https://github.com/shaswatgithub/macro-rides-mobility)
+
+---
 
 ## 🛠️ Core Engineering Stack
 
@@ -33,22 +35,3 @@ The system utilizes a lightweight, frontend-only single-file architecture deploy
 ---
 
 ## 🏎️ Computational Pipeline Architecture
-User Map Clicks / Address Search] ──> [Geospatial Center Lock]
-│
-▼
-[Smooth Vector Spline Interpolation via Turf.js]
-│
-▼
-[Autonomous Driver Progress Tick Updates]
-│
-▼
-[Real-time Buffer Buffer Ring Generation]
-│
-▼
-[Quantization into Discrete H3 Hashes]
-│
-▼
-[O(1) Set Matching Index Filter: Red = Active | Grey = Idle]
-│
-▼
-[Synchronous UI Leaflet Map Redraw]
