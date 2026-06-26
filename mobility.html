@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macro Rides Engine - Dynamic Corridor Visualizer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+    <script src="https://unpkg.com/h3-js@4.1.0/dist/h3-js.umd.js"></script>
+    <style>
+        body { margin:0; padding:0; font-family: 'Segoe UI', sans-serif; background:#f4f4f5; color:#18181b; overflow:hidden; }
+        #map { height:100vh; width:100vw; }
+        
+        /* Light Control Panel Styles */
+        .controls {
+            position: absolute; top: 15px; left: 15px; width: 340px; background: rgba(255, 255, 255, 0.96);
+            border: 1px solid #e4e4e7; border-radius: 12px; padding: 16px; z-index: 1000; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+        }
+        h1 { margin:0 0 12px 0; font-size: 20px; color: #0284c7; }
+        .info-box { background:#f4f4f5; padding:10px; border-radius:8px; font-size:13px; margin-bottom:12px; border-left: 4px solid #0284c7; color: #3f3f46; }
+        
+        input, select, button {
+            width: 100%; padding: 10px; margin: 6px 0; border-radius: 6px; border: 1px solid #d4d4d8;
+            background: #ffffff; color: #18181b; box-sizing: border-box;
+        }
+        button {
+            background: #0284c7; color: white; font-weight: bold; cursor: pointer; transition:0.2s; border: none;
+        }
+        button:hover { background:#0369a1; }
+        .btn-row { display: flex; gap: 6px; }
+        .btn-start { background: #16a34a; color: #fff; }
+        .btn-start:hover { background: #15803d; }
+        .btn-stop { background: #ea580c; color: #fff; }
+        .btn-stop:hover { background: #ca8a04; }
+        .red-btn { background:#dc2626 !important; color: white; }
+        .red-btn:hover { background:#b91c1c !important; }
+        
+        .slider-container { margin:12px 0; }
+        .slider-label { display:flex; justify-content:space-between; font-size:13px; margin-bottom: 4px; font-weight: 600; color: #4b5563; }
+        
+        .status-bar {
+            position:absolute; bottom:20px; left:20px; background:rgba(255, 255, 255, 0.95);
+            padding:10px 16px; border-radius:8px; font-size:14px; border:1px solid #0284c7; color: #0f172a; z-index: 1000; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .legend {
+            position:absolute; bottom:20px; right:20px; background:rgba(255, 255, 255, 0.95);
+            padding:12px; border-radius:8px; font-size:13px; border:1px solid #e4e4e7; z-index: 1000;
+            line-height: 1.6; color: #18181b; box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div class="controls">
+        <h1>Macro Rides Engine</h1>
+        
+        <div class="info-box">
+            <strong>How to Route:</strong> Type a location to teleport, then click multiple points on the map to draw a custom live route!
+        </div>
+
+        <div class="btn-row">
+            <button class="btn-start" onclick="startSim()">Start Engine</button>
+            <button class="btn-stop" onclick="stopSim()">Pause</button>
+        </div>
+
+        <label style="font-size: 11px; font-weight: bold; color: #6b7280;">1. JUMP TO LOCATION</label>
+        <input type="text" id="location-input" value="IIT Kanpur" placeholder="City or Landmark">
+        <button onclick="geocodeAddress()">Teleport Engine</button>
+
+        <div class="slider-container">
+            <div class="slider-label">
+                <span>2. PICKUP DENSITY</span>
+                <span id="density-value" style="color: #0284c7;">30</span> LOCATIONS
+            </div>
+            <input type="range" id="density-slider" min="5" max="100" value="30" step="5" onchange="regeneratePickupsOnly()">
+        </div>
+
+        <div class="slider-container">
+            <div class="slider-label">
+                <span>3. CORRIDOR RADIUS</span>
+                <span id="radius-value" style="color: #0284c7;">350</span>M
+            </div>
+            <input type="range" id="radius-slider" min="100" max="1000" value="350" step="50" oninput="updateParams()">
+        </div>
+
+        <label style="font-size: 11px; font-weight: bold; color: #6b7280;">4. H3 RESOLUTION HIERARCHY</label>
+        <select id="h3-resolution" onchange="updateParams()">
+            <option value="8">Resolution 8 (~700m bounds)</option>
+            <option value="9" selected>Resolution 9 (~100m localized)</option>
+            <option value="10">Resolution 10 (~40m ultra precision)</option>
+        </select>
+
+        <button onclick="clearCustomRoute()" class="red-btn">Clear Custom Route</button>
+
+        <div style="margin-top:12px; font-size:13px; background:#f4f4f5; padding:10px; border-radius:6px; line-height: 1.6; border: 1px solid #e4e4e7;">
+            <strong>Active Corridor Pickups:</strong> <span id="active-pickups" style="color: #dc2626; font-weight: bold;">0</span><br>
+            <strong>H3 Cells Active in Cache:</strong> <span id="active-cells" style="color: #0284c7; font-weight: bold;">0</span>
+        </div>
+    </div>
+
+    <div class="legend">
+        <strong>Legend</strong><br>
+        <span style="color:#16a34a;">●</span> Live Driver Route<br>
+        <span style="color:#df1690;">◼</span> Dynamic Corridor Area<br>
+        <span style="color:#0284c7;">⬡</span> H3 Active Zones<br>
+        <span style="color:#ca8a04;">●</span> Eligible Pickups
+    </div>
+
+    <div class="status-bar" id="status-bar">
+        Status: Ready • Click on map to add custom route points
+    </div>
+
+    <script>
+        // Spatial states
+        let currentCenterLat = 26.5123;
+        let currentCenterLon = 80.2329;
+        let bufferRadius = 350;
+        let h3Resolution = 9;
+
+        // Simulation engine arrays
+        let userClickedCoords = [];
+        let pathCoordinates = [];
+        let mockPickups = [];
+        let step = 0;
+        let simInterval = null;
+
+        // Light Map Canvas Initialization
+        const map = L.map('map', { zoomControl: false }).setView([currentCenterLat, currentCenterLon], 14);
+        
+        // Swapped to high-detail Light OSM standard tiles
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        // Graphics Layers
+        let driverMarker = null;
+        let bufferLayer = null;
+        let routeLayer = null;
+        let clickMarkersGroup = L.layerGroup().addTo(map);
+        let pickupLayerGroup = L.layerGroup().addTo(map);
+        let h3GridLayerGroup = L.layerGroup().addTo(map);
+
+        // Map Click Listener
+        map.on('click', function (e) {
+            const lat = e.latlng.lat;
+            const lon = e.latlng.lng;
+
+            userClickedCoords.push([lon, lat]);
+
+            L.circleMarker(e.latlng, {
+                radius: 5,
+                color: '#0284c7',
+                fillColor: '#ffffff',
+                fillOpacity: 1,
+                weight: 2,
+            }).addTo(clickMarkersGroup);
+
+            if (userClickedCoords.length >= 2) {
+                buildRouteFromCoordinates(userClickedCoords);
+            }
+        });
+
+        function buildRouteFromCoordinates(coordsArray) {
+            if (routeLayer) map.removeLayer(routeLayer);
+            step = 0;
+
+            const routeLine = turf.lineString(coordsArray);
+            routeLayer = L.geoJSON(routeLine, {
+                color: "#16a34a", // Clean green route line
+                weight: 5,
+                dashArray: "5, 8",
+            }).addTo(map);
+
+            const totalSteps = 200;
+            const totalLength = turf.length(routeLine);
+
+            if (totalLength > 0) {
+                const lineChunks = turf.lineChunk(
+                    routeLine,
+                    totalLength / totalSteps,
+                    { units: "kilometers" },
+                );
+                pathCoordinates = lineChunks.features.map(
+                    (f) => f.geometry.coordinates[0],
+                );
+            }
+        }
+
+        function clearCustomRoute() {
+            userClickedCoords = [];
+            pathCoordinates = [];
+            step = 0;
+            if (routeLayer) map.removeLayer(routeLayer);
+            if (driverMarker) map.removeLayer(driverMarker);
+            if (bufferLayer) map.removeLayer(bufferLayer);
+            clickMarkersGroup.clearLayers();
+            pickupLayerGroup.clearLayers();
+            h3GridLayerGroup.clearLayers();
+            generateDefaultRoute();
+            document.getElementById("status-bar").innerText = "Status: Cleared • Click map to route";
+        }
+
+        async function geocodeAddress() {
+            const query = document.getElementById("location-input").value;
+            if (!query) return;
+
+            try {
+                const response = await fetch(
+                    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`,
+                );
+                const data = await response.json();
+
+                if (data && data.length > 0) {
+                    currentCenterLat = parseFloat(data[0].lat);
+                    currentCenterLon = parseFloat(data[0].lon);
+
+                    map.setView([currentCenterLat, currentCenterLon], 14);
+                    clearCustomRoute();
+                } else {
+                    alert("Location tracking target not identified.");
+                }
+            } catch (error) {
+                console.error("Geocoding exception:", error);
+            }
+        }
+
+        function generateDefaultRoute() {
+            const defaultPath = [
+                [currentCenterLon - 0.01, currentCenterLat + 0.005],
+                [currentCenterLon - 0.002, currentCenterLat + 0.002],
+                [currentCenterLon + 0.002, currentCenterLat - 0.002],
+                [currentCenterLon + 0.01, currentCenterLat - 0.005],
+            ];
+            buildRouteFromCoordinates(defaultPath);
+            regeneratePickupsOnly();
+        }
+
+        function regeneratePickupsOnly() {
+            const desiredCount = parseInt(document.getElementById("density-slider").value);
+            document.getElementById("density-value").innerText = desiredCount;
+            mockPickups = [];
+
+            for (let i = 0; i < desiredCount; i++) {
+                const latOffset = (Math.random() - 0.5) * 0.018;
+                const lonOffset = (Math.random() - 0.5) * 0.026;
+                const pLat = currentCenterLat + latOffset;
+                const pLon = currentCenterLon + lonOffset;
+
+                mockPickups.push({
+                    coords: [pLat, pLon],
+                    name: `Pickup Node #${i + 1}`,
+                });
+            }
+        }
+
+        function updateSimulation() {
+            if (!pathCoordinates.length) return;
+            if (step >= pathCoordinates.length) step = 0;
+
+            const currentLngLat = pathCoordinates[step];
+            const currentLatLon = [currentLngLat[1], currentLngLat[0]];
+
+            if (driverMarker) map.removeLayer(driverMarker);
+            if (bufferLayer) map.removeLayer(bufferLayer);
+            pickupLayerGroup.clearLayers();
+            h3GridLayerGroup.clearLayers();
+
+            // Render Active Driver Marker
+            driverMarker = L.circleMarker(currentLatLon, {
+                radius: 8,
+                color: "#ffffff",
+                fillColor: "#16a34a",
+                fillOpacity: 1,
+                weight: 2
+            }).addTo(map);
+
+            document.getElementById("status-bar").innerText = `Driver Location: ${currentLatLon[0].toFixed(5)}, ${currentLatLon[1].toFixed(5)}`;
+
+            // Corridor Generation
+            const pointFeature = turf.point(currentLngLat);
+            const bufferGeoJSON = turf.buffer(pointFeature, bufferRadius, { units: "meters" });
+            
+            bufferLayer = L.geoJSON(bufferGeoJSON, {
+                color: "#df1690",
+                fillColor: "#df1690",
+                fillOpacity: 0.1,
+                weight: 2,
+            }).addTo(map);
+
+            // Calculate active H3 matrix cells
+            const polygonCoords = bufferGeoJSON.geometry.coordinates[0].map(
+                (coord) => [coord[1], coord[0]],
+            );
+            let bufferedH3Cells = [];
+            try {
+                bufferedH3Cells = h3.polygonToCells(polygonCoords, h3Resolution);
+            } catch (e) {}
+
+            document.getElementById("active-cells").innerText = bufferedH3Cells.length;
+
+            // Render Blue Light H3 Grid cells
+            bufferedH3Cells.forEach(cellHash => {
+                const boundary = h3.cellToBoundary(cellHash);
+                const leafletBoundary = boundary.map(pt => [pt[0], pt[1]]);
+                
+                L.polygon(leafletBoundary, {
+                    color: "#0284c7",
+                    weight: 1.5,
+                    opacity: 0.4,
+                    fillColor: "#0284c7",
+                    fillOpacity: 0.05
+                }).addTo(h3GridLayerGroup);
+            });
+
+            const bufferSet = new Set(bufferedH3Cells);
+            let eligibleCount = 0;
+
+            mockPickups.forEach((p) => {
+                const h3Index = h3.latLngToCell(p.coords[0], p.coords[1], h3Resolution);
+                const isEligible = bufferSet.has(h3Index);
+                if (isEligible) eligibleCount++;
+
+                L.circleMarker(p.coords, {
+                    radius: isEligible ? 6.5 : 4.5,
+                    color: isEligible ? "#ca8a04" : "#9ca3af",
+                    fillColor: isEligible ? "#facc15" : "#e4e4e7",
+                    fillOpacity: isEligible ? 0.95 : 0.5,
+                    weight: 1,
+                })
+                .bindPopup(`<b>${p.name}</b><br>H3 Cell ID: ${h3Index}`)
+                .addTo(pickupLayerGroup);
+            });
+
+            document.getElementById("active-pickups").innerText = eligibleCount;
+            step++;
+        }
+
+        function updateParams() {
+            bufferRadius = parseInt(document.getElementById("radius-slider").value);
+            h3Resolution = parseInt(document.getElementById("h3-resolution").value);
+            document.getElementById("radius-value").innerText = bufferRadius;
+        }
+
+        function startSim() {
+            if (!simInterval) {
+                simInterval = setInterval(updateSimulation, 250);
+            }
+        }
+
+        function stopSim() {
+            if (simInterval) {
+                clearInterval(simInterval);
+                simInterval = null;
+            }
+        }
+
+        window.onload = () => {
+            generateDefaultRoute();
+            startSim();
+        };
+    </script>
+</body>
+</html>
