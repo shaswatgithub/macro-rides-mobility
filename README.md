@@ -8,7 +8,7 @@ An interactive, high-performance geospatial simulation platform designed for **M
 
 ## 🔗 Live Deployments
 
-* **🖥️ Interactive Production Demo:** [macro-rides-mobility.netlify.app](https://macro-rides-mobility.netlify.app/)
+* **🖥️ Interactive Production Demo:** [macro-rides-mobility.netlify.app](https://macro-rides-ev.netlify.app/)
 * **📁 Source Code Repository:** [github.com/shaswatgithub/macro-rides-mobility](https://github.com/shaswatgithub/macro-rides-mobility)
 
 ---
